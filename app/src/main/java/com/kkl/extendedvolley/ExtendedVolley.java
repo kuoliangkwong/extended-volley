@@ -1,8 +1,6 @@
 package com.kkl.extendedvolley;
 
 import android.content.Context;
-import android.util.Base64;
-import android.util.Log;
 
 import com.android.volley.AuthFailureError;
 import com.android.volley.NetworkError;
@@ -44,7 +42,7 @@ public class ExtendedVolley {
         void onResponse(String result);
     }
 
-    private ExtendedVolley(Context context) {
+    protected ExtendedVolley(Context context) {
         mContext = context;
         mRequestQueue = getRequestQueue();
     }
@@ -57,6 +55,10 @@ public class ExtendedVolley {
         return mInstance;
     }
 
+    protected Map<String, String> getHeaders() {
+        return mHeaders;
+    }
+
     private RequestQueue getRequestQueue() {
         if (mRequestQueue == null) {
             mRequestQueue = Volley.newRequestQueue(mContext.getApplicationContext());
@@ -64,7 +66,7 @@ public class ExtendedVolley {
         return mRequestQueue;
     }
 
-    private void clear() {
+    private synchronized void clear() {
         mUrl = null;
         mFileDestination = null;
         mRequestType = null;
@@ -108,6 +110,8 @@ public class ExtendedVolley {
         if (mRequestType == null) {
             throw new NullPointerException("You need to call asFile() or asString() before calling get()");
         }
+        final Listener listener = mListener;
+        final Response.ErrorListener errorListener = mErrorListener;
         switch (mRequestType) {
             case FILE: {
                 InputStreamVolleyRequest request = getFileRequest(Request.Method.GET, mUrl, mHeaders,
@@ -119,15 +123,15 @@ public class ExtendedVolley {
                                         FileOutputStream outputStream = new FileOutputStream(mFileDestination);
                                         outputStream.write(response);
                                         outputStream.close();
-                                        notifyListener(mFileDestination);
+                                        notifyListener(listener, mFileDestination);
                                     } else {
-                                        mErrorListener.onErrorResponse(new NetworkError());
+                                        notifyErrorListener(errorListener, new NetworkError());
                                     }
                                 } catch (Exception e) {
-                                    mErrorListener.onErrorResponse(new ParseError(e));
+                                    notifyErrorListener(errorListener, new ParseError());
                                 }
                             }
-                        }, mErrorListener);
+                        }, errorListener);
                 addToRequestQueue(request);
                 break;
             }
@@ -136,9 +140,9 @@ public class ExtendedVolley {
                         new Response.Listener<String>() {
                             @Override
                             public void onResponse(String response) {
-                                notifyListener(response);
+                                notifyListener(listener, response);
                             }
-                        }, mErrorListener);
+                        }, errorListener);
                 addToRequestQueue(request);
                 break;
             }
@@ -169,9 +173,9 @@ public class ExtendedVolley {
     }
 
     private InputStreamVolleyRequest getFileRequest(int method, String url,
-                                           Map<String, String> headers,
-                                           Response.Listener<byte[]> listener,
-                                           Response.ErrorListener errorListener) {
+                                                    Map<String, String> headers,
+                                                    Response.Listener<byte[]> listener,
+                                                    Response.ErrorListener errorListener) {
         final Map<String, String> headersCopy =
                 headers != null ? new HashMap<>(headers) : new HashMap<String, String>();
         InputStreamVolleyRequest request = new InputStreamVolleyRequest(
@@ -185,9 +189,15 @@ public class ExtendedVolley {
         return request;
     }
 
-    private void notifyListener(String result) {
-        if (mListener != null) {
-            mListener.onResponse(result);
+    private void notifyListener(Listener listener, String result) {
+        if (listener != null) {
+            listener.onResponse(result);
+        }
+    }
+
+    private void notifyErrorListener(Response.ErrorListener errorListener, VolleyError error) {
+        if (errorListener != null) {
+            errorListener.onErrorResponse(error);
         }
     }
 
